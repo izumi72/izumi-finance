@@ -69,3 +69,19 @@ Stage Summary:
 - No more 401 errors after login
 - Session persistence works across page reloads via localStorage token
 - Cookie mechanism kept as fallback for same-origin environments
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Prepare code for Vercel + Turso deployment
+
+Work Log:
+- Installed @libsql/client and @prisma/adapter-libsql packages
+- Updated src/lib/db.ts to conditionally use Turso (libSQL) adapter when TURSO_DATABASE_URL env var is set, otherwise falls back to local SQLite
+- Created .env.example with documented environment variables (DATABASE_URL, NEXTAUTH_SECRET, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN)
+- Updated .gitignore to allow .env.example to be committed while keeping .env private
+- Verified lint passes clean and local dev server still works without Turso env vars
+
+Stage Summary:
+- Code is deployment-ready: works locally with SQLite, automatically switches to Turso when env vars are set
+- User only needs to: create accounts, create Turso DB, push to GitHub, deploy on Vercel, set env vars
