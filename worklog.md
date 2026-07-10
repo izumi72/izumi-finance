@@ -85,3 +85,19 @@ Work Log:
 Stage Summary:
 - Code is deployment-ready: works locally with SQLite, automatically switches to Turso when env vars are set
 - User only needs to: create accounts, create Turso DB, push to GitHub, deploy on Vercel, set env vars
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Fix build error caused by @prisma/adapter-libsql version and typo
+
+Work Log:
+- Root cause 1: `@prisma/adapter-libsql@7.x` incompatible with `@prisma/client@6.x` → downgraded to v6
+- Root cause 2: Export name typo `PrismaLibSql` → fixed to `PrismaLibSQL` (capital SQL)
+- Error message was: "Export PrismaLibSql doesn't exist in target module... Did you mean to import PrismaLibSQL?"
+- After fix: all API routes return 200, no build errors, lint clean
+
+Stage Summary:
+- Fixed version mismatch: @prisma/adapter-libsql@6.19.3 (compatible with @prisma/client@6.11.1)
+- Fixed typo: PrismaLibSql → PrismaLibSQL in src/lib/db.ts
+- Server compiles and runs without errors
