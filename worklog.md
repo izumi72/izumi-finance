@@ -101,3 +101,23 @@ Stage Summary:
 - Fixed version mismatch: @prisma/adapter-libsql@6.19.3 (compatible with @prisma/client@6.11.1)
 - Fixed typo: PrismaLibSql → PrismaLibSQL in src/lib/db.ts
 - Server compiles and runs without errors
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Rangkai ulang kode supaya bisa deploy ke mana saja (universal)
+
+Work Log:
+- Diagnosed that `require()` and top-level `import` of @prisma/adapter-libsql both cause Turbopack compilation errors in Next.js 16
+- Removed @libsql/client and @prisma/adapter-libsql from package.json entirely
+- Restructured for universal deployment:
+  1. `prisma/schema.prisma` — Added documentation comments for switching provider (sqlite/postgresql/mysql)
+  2. `src/lib/db.ts` — Clean minimal PrismaClient, works with SQLite/PostgreSQL/MySQL natively
+  3. `src/lib/db.turso.ts` — Separate swap-in file for Turso users (copy to db.ts + install 2 packages)
+  4. `.env.example` — All 4 database options documented with examples
+- Verified: lint clean, server starts, login OK, all APIs return 200, data correct
+
+Stage Summary:
+- Architecture: 1 db.ts file works for SQLite/PostgreSQL/MySQL, separate db.turso.ts for Turso
+- Zero runtime errors, zero build errors
+- Deploy target: anywhere (Vercel, Railway, VPS, Netlify, etc.)

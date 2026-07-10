@@ -1,3 +1,25 @@
+// ============================================================
+//  CARA GANTI DATABASE UNTUK DEPLOY:
+//
+//  1. SQLite (default / development):
+//     provider = "sqlite"
+//     url      = "file:./db/custom.db"
+//
+//  2. PostgreSQL (Vercel Postgres, Supabase, Neon, Railway, dll):
+//     provider = "postgresql"
+//     url      = env("DATABASE_URL")  → isi di .env
+//
+//  3. MySQL (PlanetScale, Railway, dll):
+//     provider = "mysql"
+//     url      = env("DATABASE_URL")  → isi di .env
+//
+//  4. Turso (libSQL):
+//     provider = "sqlite"  (tetap sqlite)
+//     url      = env("DATABASE_URL")  → libsql://xxx.turso.io
+//     Lalu GANTI file src/lib/db.ts dengan src/lib/db.turso.ts
+//     dan jalankan: bun add @libsql/client @prisma/adapter-libsql
+// ============================================================
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -21,7 +43,7 @@ model User {
 model Transaction {
   id          String   @id @default(cuid())
   userId      String
-  type        String   // "pemasukan" or "pengeluaran"
+  type        String
   date        DateTime
   category    String
   amount      Int
