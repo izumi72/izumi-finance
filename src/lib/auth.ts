@@ -1,6 +1,5 @@
 import jwt from "jsonwebtoken"
-import { cookies } from "next/headers"
-import { headers } from "next/headers"
+import { cookies, headers } from "next/headers"
 
 const JWT_SECRET = process.env.NEXTAUTH_SECRET || "fallback-secret"
 
