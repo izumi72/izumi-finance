@@ -1,0 +1,900 @@
+     1→     1→"use client"
+     2→     2→
+     3→     3→import { useState, useEffect, useCallback, createContext, useContext } from "react"
+     4→     4→import { useRouter } from "next/navigation"
+     5→     5→import { motion, AnimatePresence } from "framer-motion"
+     6→     6→import { Button } from "@/components/ui/button"
+     7→     7→import { Input } from "@/components/ui/input"
+     8→     8→import { Label } from "@/components/ui/label"
+     9→     9→import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+    10→    10→import {
+    11→    11→  Select,
+    12→    12→  SelectContent,
+    13→    13→  SelectItem,
+    14→    14→  SelectTrigger,
+    15→    15→  SelectValue,
+    16→    16→} from "@/components/ui/select"
+    17→    17→import { Textarea } from "@/components/ui/textarea"
+    18→    18→import { useToast } from "@/hooks/use-toast"
+    19→    19→import {
+    20→    20→  TrendingDown,
+    21→    21→  TrendingUp,
+    22→    22→  Scale,
+    23→    23→  PlusCircle,
+    24→    24→  Clock,
+    25→    25→  LogOut,
+    26→    26→  User,
+    27→    27→  Settings,
+    28→    28→  Lock,
+    29→    29→  RotateCcw,
+    30→    30→  Trash2,
+    31→    31→  Eye,
+    32→    32→  EyeOff,
+    33→    33→} from "lucide-react"
+    34→    34→import { cn } from "@/lib/utils"
+    35→    35→
+    36→    36→// ---------- Types ----------
+    37→    37→interface SessionUser {
+    38→    38→  id: string
+    39→    39→  name: string
+    40→    40→  email: string
+    41→    41→}
+    42→    42→
+    43→    43→interface Transaction {
+    44→    44→  id: string
+    45→    45→  type: string
+    46→    46→  date: string
+    47→    47→  category: string
+    48→    48→  amount: number
+    49→    49→  description: string | null
+    50→    50→}
+    51→    51→
+    52→    52→interface Summary {
+    53→    53→  totalPemasukan: number
+    54→    54→  totalPengeluaran: number
+    55→    55→  sisaSaldo: number
+    56→    56→}
+    57→    57→
+    58→    58→// ---------- Auth Context ----------
+    59→    59→const AuthContext = createContext<{
+    60→    60→  user: SessionUser | null
+    61→    61→  loading: boolean
+    62→    62→  refresh: () => Promise<void>
+    63→    63→  logout: () => Promise<void>
+    64→    64→}>({ user: null, loading: true, refresh: async () => {}, logout: async () => {} })
+    65→    65→
+    66→    66→function AuthProvider({ children }: { children: React.ReactNode }) {
+    67→    67→  const [user, setUser] = useState<SessionUser | null>(null)
+    68→    68→  const [loading, setLoading] = useState(true)
+    69→    69→
+    70→    70→  const refresh = useCallback(async () => {
+    71→    71→    try {
+    72→    72→      const res = await fetch("/api/auth/session")
+    73→    73→      const data = await res.json()
+    74→    74→      setUser(data.session)
+    75→    75→    } catch {
+    76→    76→      setUser(null)
+    77→    77→    } finally {
+    78→    78→      setLoading(false)
+    79→    79→    }
+    80→    80→  }, [])
+    81→    81→
+    82→    82→  const logout = useCallback(async () => {
+    83→    83→    await fetch("/api/auth/logout", { method: "POST" })
+    84→    84→    setUser(null)
+    85→    85→  }, [])
+    86→    86→
+    87→    87→  useEffect(() => {
+    88→    88→    refresh()
+    89→    89→  }, [refresh])
+    90→    90→
+    91→    91→  return (
+    92→    92→    <AuthContext.Provider value={{ user, loading, refresh, logout }}>
+    93→    93→      {children}
+    94→    94→    </AuthContext.Provider>
+    95→    95→  )
+    96→    96→}
+    97→    97→
+    98→    98→function useAuth() {
+    99→    99→  return useContext(AuthContext)
+   100→   100→}
+   101→   101→
+   102→   102→// ---------- Constants ----------
+   103→   103→const MONTHS = [
+   104→   104→  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+   105→   105→  "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+   106→   106→]
+   107→   107→
+   108→   108→const CATEGORIES_PEMASUKAN = [
+   109→   109→  "Gaji / Hasil Kerja",
+   110→   110→  "Freelance / Side Job",
+   111→   111→  "Investasi",
+   112→   112→  "Bisnis",
+   113→   113→  "Hadiah",
+   114→   114→  "Lainnya",
+   115→   115→]
+   116→   116→
+   117→   117→const CATEGORIES_PENGELUARAN = [
+   118→   118→  "Makanan & Minuman",
+   119→   119→  "Transportasi",
+   120→   120→  "Belanja",
+   121→   121→  "Tagihan & Utilitas",
+   122→   122→  "Kesehatan",
+   123→   123→  "Hiburan",
+   124→   124→  "Pendidikan",
+   125→   125→  "Cicilan & Hutang",
+   126→   126→  "Tabungan & Investasi",
+   127→   127→  "Lainnya",
+   128→   128→]
+   129→   129→
+   130→   130→function formatRupiah(amount: number): string {
+   131→   131→  return new Intl.NumberFormat("id-ID", {
+   132→   132→    style: "currency",
+   133→   133→    currency: "IDR",
+   134→   134→    minimumFractionDigits: 0,
+   135→   135→    maximumFractionDigits: 0,
+   136→   136→  }).format(amount)
+   137→   137→}
+   138→   138→
+   139→   139→function formatDate(dateStr: string): string {
+   140→   140→  const date = new Date(dateStr)
+   141→   141→  return date.toLocaleDateString("id-ID", {
+   142→   142→    day: "2-digit",
+   143→   143→    month: "2-digit",
+   144→   144→    year: "numeric",
+   145→   145→  })
+   146→   146→}
+   147→   147→
+   148→   148→// ========== AUTH PAGE ==========
+   149→   149→function AuthPage() {
+   150→   150→  const [isLogin, setIsLogin] = useState(true)
+   151→   151→  const [name, setName] = useState("")
+   152→   152→  const [email, setEmail] = useState("")
+   153→   153→  const [password, setPassword] = useState("")
+   154→   154→  const [showPassword, setShowPassword] = useState(false)
+   155→   155→  const [loading, setLoading] = useState(false)
+   156→   156→  const { toast } = useToast()
+   157→   157→  const { refresh } = useAuth()
+   158→   158→
+   159→   159→  const handleSubmit = async (e: React.FormEvent) => {
+   160→   160→    e.preventDefault()
+   161→   161→    setLoading(true)
+   162→   162→
+   163→   163→    try {
+   164→   164→      if (!isLogin) {
+   165→   165→        const res = await fetch("/api/auth/register", {
+   166→   166→          method: "POST",
+   167→   167→          headers: { "Content-Type": "application/json" },
+   168→   168→          body: JSON.stringify({ name, email, password }),
+   169→   169→        })
+   170→   170→        const data = await res.json()
+   171→   171→
+   172→   172→        if (!res.ok) {
+   173→   173→          toast({ title: "Gagal", description: data.error, variant: "destructive" })
+   174→   174→          setLoading(false)
+   175→   175→          return
+   176→   176→        }
+   177→   177→
+   178→   178→        toast({ title: "Berhasil!", description: "Akun berhasil dibuat. Silakan login." })
+   179→   179→        setIsLogin(true)
+   180→   180→        setPassword("")
+   181→   181→      } else {
+   182→   182→        const res = await fetch("/api/auth/login", {
+   183→   183→          method: "POST",
+   184→   184→          headers: { "Content-Type": "application/json" },
+   185→   185→          body: JSON.stringify({ email, password }),
+   186→   186→        })
+   187→   187→
+   188→   188→        const data = await res.json()
+   189→   189→
+   190→   190→        if (!res.ok) {
+   191→   191→          toast({ title: "Login Gagal", description: data.error, variant: "destructive" })
+   192→   192→          setLoading(false)
+   193→   193→          return
+   194→   194→        }
+   195→   195→
+   196→   196→        toast({ title: "Login Berhasil!", description: `Selamat datang, ${data.user.name}` })
+   197→   197→        await refresh()
+   198→   198→      }
+   199→   199→    } catch {
+   200→   200→      toast({ title: "Error", description: "Terjadi kesalahan", variant: "destructive" })
+   201→   201→    }
+   202→   202→
+   203→   203→    setLoading(false)
+   204→   204→  }
+   205→   205→
+   206→   206→  return (
+   207→   207→    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
+   208→   208→      <div
+   209→   209→        className="w-full max-w-md"
+   210→   210→      >
+   211→   211→        {/* Logo / Brand */}
+   212→   212→        <div className="text-center mb-8">
+   213→   213→          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-500 mb-4">
+   214→   214→            <Scale className="w-8 h-8 text-white" />
+   215→   215→          </div>
+   216→   216→          <h1 className="text-3xl font-bold text-white">Dashboard Izumi</h1>
+   217→   217→          <p className="text-slate-400 mt-1">Sistem Keuangan Mandiri</p>
+   218→   218→        </div>
+   219→   219→
+   220→   220→        {/* Card */}
+   221→   221→        <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8">
+   222→   222→          {/* Tabs */}
+   223→   223→          <div className="flex bg-slate-100 rounded-lg p-1 mb-6">
+   224→   224→            <button
+   225→   225→              onClick={() => setIsLogin(true)}
+   226→   226→              className={cn(
+   227→   227→                "flex-1 py-2.5 text-sm font-semibold rounded-md transition-all",
+   228→   228→                isLogin
+   229→   229→                  ? "bg-white text-slate-900 shadow-sm"
+   230→   230→                  : "text-slate-500 hover:text-slate-700"
+   231→   231→              )}
+   232→   232→            >
+   233→   233→              Masuk
+   234→   234→            </button>
+   235→   235→            <button
+   236→   236→              onClick={() => setIsLogin(false)}
+   237→   237→              className={cn(
+   238→   238→                "flex-1 py-2.5 text-sm font-semibold rounded-md transition-all",
+   239→   239→                !isLogin
+   240→   240→                  ? "bg-white text-slate-900 shadow-sm"
+   241→   241→                  : "text-slate-500 hover:text-slate-700"
+   242→   242→              )}
+   243→   243→            >
+   244→   244→              Daftar
+   245→   245→            </button>
+   246→   246→          </div>
+   247→   247→
+   248→   248→          <form onSubmit={handleSubmit} className="space-y-4">
+   249→   249→            <AnimatePresence mode="wait">
+   250→   250→              {!isLogin && (
+   251→   251→                <motion.div
+   252→   252→                  key="name-field"
+   253→   253→                  initial={{ opacity: 0, height: 0 }}
+   254→   254→                  animate={{ opacity: 1, height: "auto" }}
+   255→   255→                  exit={{ opacity: 0, height: 0 }}
+   256→   256→                  transition={{ duration: 0.2 }}
+   257→   257→                >
+   258→   258→                  <Label htmlFor="name">Nama Lengkap</Label>
+   259→   259→                  <Input
+   260→   260→                    id="name"
+   261→   261→                    type="text"
+   262→   262→                    placeholder="Masukkan nama lengkap"
+   263→   263→                    value={name}
+   264→   264→                    onChange={(e) => setName(e.target.value)}
+   265→   265→                    required={!isLogin}
+   266→   266→                    className="mt-1.5"
+   267→   267→                  />
+   268→   268→                </motion.div>
+   269→   269→              )}
+   270→   270→            </AnimatePresence>
+   271→   271→
+   272→   272→            <div>
+   273→   273→              <Label htmlFor="email">Email</Label>
+   274→   274→              <Input
+   275→   275→                id="email"
+   276→   276→                type="email"
+   277→   277→                placeholder="contoh@email.com"
+   278→   278→                value={email}
+   279→   279→                onChange={(e) => setEmail(e.target.value)}
+   280→   280→                required
+   281→   281→                className="mt-1.5"
+   282→   282→              />
+   283→   283→            </div>
+   284→   284→
+   285→   285→            <div>
+   286→   286→              <Label htmlFor="password">Password</Label>
+   287→   287→              <div className="relative mt-1.5">
+   288→   288→                <Input
+   289→   289→                  id="password"
+   290→   290→                  type={showPassword ? "text" : "password"}
+   291→   291→                  placeholder="Minimal 6 karakter"
+   292→   292→                  value={password}
+   293→   293→                  onChange={(e) => setPassword(e.target.value)}
+   294→   294→                  required
+   295→   295→                  className="pr-10"
+   296→   296→                />
+   297→   297→                <button
+   298→   298→                  type="button"
+   299→   299→                  onClick={() => setShowPassword(!showPassword)}
+   300→   300→                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+   301→   301→                >
+   302→   302→                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+   303→   303→                </button>
+   304→   304→              </div>
+   305→   305→            </div>
+   306→   306→
+   307→   307→            <Button
+   308→   308→              type="submit"
+   309→   309→              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-5"
+   310→   310→              disabled={loading}
+   311→   311→            >
+   312→   312→              {loading ? (
+   313→   313→                <span className="flex items-center gap-2">
+   314→   314→                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+   315→   315→                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+   316→   316→                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+   317→   317→                  </svg>
+   318→   318→                  Memproses...
+   319→   319→                </span>
+   320→   320→              ) : isLogin ? (
+   321→   321→                "Masuk"
+   322→   322→              ) : (
+   323→   323→                "Daftar Akun"
+   324→   324→              )}
+   325→   325→            </Button>
+   326→   326→          </form>
+   327→   327→        </div>
+   328→   328→
+   329→   329→        <p className="text-center text-slate-500 text-xs mt-6">
+   330→   330→          Setiap pengguna memiliki catatan keuangan pribadi yang terpisah
+   331→   331→        </p>
+   332→   332→      </div>
+   333→   333→    </div>
+   334→   334→  )
+   335→   335→}
+   336→   336→
+   337→   337→// ========== DASHBOARD PAGE ==========
+   338→   338→function Dashboard() {
+   339→   339→  const { user, logout } = useAuth()
+   340→   340→  const { toast } = useToast()
+   341→   341→
+   342→   342→  // Form state
+   343→   343→  const [txType, setTxType] = useState<"pemasukan" | "pengeluaran">("pemasukan")
+   344→   344→  const [txDate, setTxDate] = useState(() => {
+   345→   345→    const now = new Date()
+   346→   346→    return now.toISOString().split("T")[0]
+   347→   347→  })
+   348→   348→  const [txCategory, setTxCategory] = useState("")
+   349→   349→  const [txAmount, setTxAmount] = useState("")
+   350→   350→  const [txDescription, setTxDescription] = useState("")
+   351→   351→  const [submitting, setSubmitting] = useState(false)
+   352→   352→
+   353→   353→  // Data state
+   354→   354→  const [transactions, setTransactions] = useState<Transaction[]>([])
+   355→   355→  const [summary, setSummary] = useState<Summary>({
+   356→   356→    totalPemasukan: 0,
+   357→   357→    totalPengeluaran: 0,
+   358→   358→    sisaSaldo: 0,
+   359→   359→  })
+   360→   360→  const [loading, setLoading] = useState(true)
+   361→   361→
+   362→   362→  // Filter state
+   363→   363→  const now = new Date()
+   364→   364→  const [filterMonth, setFilterMonth] = useState(String(now.getMonth() + 1))
+   365→   365→  const [filterYear, setFilterYear] = useState(String(now.getFullYear()))
+   366→   366→
+   367→   367→  const currentCategories = txType === "pemasukan" ? CATEGORIES_PEMASUKAN : CATEGORIES_PENGELUARAN
+   368→   368→
+   369→   369→  const fetchData = useCallback(async () => {
+   370→   370→    try {
+   371→   371→      const [txRes, sumRes] = await Promise.all([
+   372→   372→        fetch(`/api/transactions?month=${filterMonth}&year=${filterYear}`),
+   373→   373→        fetch("/api/summary"),
+   374→   374→      ])
+   375→   375→
+   376→   376→      if (txRes.ok) {
+   377→   377→        const txData = await txRes.json()
+   378→   378→        setTransactions(txData.transactions || [])
+   379→   379→      }
+   380→   380→
+   381→   381→      if (sumRes.ok) {
+   382→   382→        const sumData = await sumRes.json()
+   383→   383→        setSummary(sumData)
+   384→   384→      }
+   385→   385→    } catch {
+   386→   386→      toast({ title: "Error", description: "Gagal memuat data", variant: "destructive" })
+   387→   387→    } finally {
+   388→   388→      setLoading(false)
+   389→   389→    }
+   390→   390→  }, [filterMonth, filterYear, toast])
+   391→   391→
+   392→   392→  useEffect(() => {
+   393→   393→    if (user) {
+   394→   394→      fetchData()
+   395→   395→    }
+   396→   396→  }, [user, fetchData])
+   397→   397→
+   398→   398→  const handleSubmit = async (e: React.FormEvent) => {
+   399→   399→    e.preventDefault()
+   400→   400→    if (!txCategory || !txAmount) {
+   401→   401→      toast({ title: "Peringatan", description: "Kategori dan nominal wajib diisi", variant: "destructive" })
+   402→   402→      return
+   403→   403→    }
+   404→   404→
+   405→   405→    setSubmitting(true)
+   406→   406→    try {
+   407→   407→      const res = await fetch("/api/transactions", {
+   408→   408→        method: "POST",
+   409→   409→        headers: { "Content-Type": "application/json" },
+   410→   410→        body: JSON.stringify({
+   411→   411→          type: txType,
+   412→   412→          date: txDate,
+   413→   413→          category: txCategory,
+   414→   414→          amount: txAmount,
+   415→   415→          description: txDescription,
+   416→   416→        }),
+   417→   417→      })
+   418→   418→
+   419→   419→      const data = await res.json()
+   420→   420→
+   421→   421→      if (!res.ok) {
+   422→   422→        toast({ title: "Gagal", description: data.error, variant: "destructive" })
+   423→   423→      } else {
+   424→   424→        toast({ title: "Berhasil!", description: "Transaksi berhasil disimpan" })
+   425→   425→        setTxAmount("")
+   426→   426→        setTxDescription("")
+   427→   427→        setTxCategory("")
+   428→   428→        fetchData()
+   429→   429→      }
+   430→   430→    } catch {
+   431→   431→      toast({ title: "Error", description: "Gagal menyimpan transaksi", variant: "destructive" })
+   432→   432→    }
+   433→   433→    setSubmitting(false)
+   434→   434→  }
+   435→   435→
+   436→   436→  const handleDelete = async (id: string) => {
+   437→   437→    if (!confirm("Yakin ingin menghapus transaksi ini?")) return
+   438→   438→
+   439→   439→    try {
+   440→   440→      const res = await fetch(`/api/transactions?id=${id}`, { method: "DELETE" })
+   441→   441→      const data = await res.json()
+   442→   442→
+   443→   443→      if (res.ok) {
+   444→   444→        toast({ title: "Berhasil", description: "Transaksi berhasil dihapus" })
+   445→   445→        fetchData()
+   446→   446→      } else {
+   447→   447→        toast({ title: "Gagal", description: data.error, variant: "destructive" })
+   448→   448→      }
+   449→   449→    } catch {
+   450→   450→      toast({ title: "Error", description: "Gagal menghapus transaksi", variant: "destructive" })
+   451→   451→    }
+   452→   452→  }
+   453→   453→
+   454→   454→  const handleReset = async () => {
+   455→   455→    if (!confirm("PERINGATAN: Semua data keuangan Anda akan dihapus permanen. Lanjutkan?")) return
+   456→   456→
+   457→   457→    try {
+   458→   458→      const res = await fetch("/api/transactions", { method: "PUT" })
+   459→   459→      const data = await res.json()
+   460→   460→
+   461→   461→      if (res.ok) {
+   462→   462→        toast({ title: "Berhasil", description: "Semua data keuangan berhasil direset" })
+   463→   463→        fetchData()
+   464→   464→      } else {
+   465→   465→        toast({ title: "Gagal", description: data.error, variant: "destructive" })
+   466→   466→      }
+   467→   467→    } catch {
+   468→   468→      toast({ title: "Error", description: "Gagal mereset data", variant: "destructive" })
+   469→   469→    }
+   470→   470→  }
+   471→   471→
+   472→   472→  const handleLogout = async () => {
+   473→   473→    await logout()
+   474→   474→  }
+   475→   475→
+   476→   476→  // Generate years for filter
+   477→   477→  const currentYear = new Date().getFullYear()
+   478→   478→  const years = Array.from({ length: 5 }, (_, i) => String(currentYear - 2 + i))
+   479→   479→
+   480→   480→  return (
+   481→   481→    <div className="min-h-screen flex bg-slate-50">
+   482→   482→      {/* Sidebar */}
+   483→   483→      <aside className="hidden md:flex w-64 flex-col bg-slate-800 text-white flex-shrink-0">
+   484→   484→        <div className="p-6 border-b border-slate-700">
+   485→   485→          <div className="flex items-center gap-3 mb-1">
+   486→   486→            <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
+   487→   487→              <Scale className="w-5 h-5" />
+   488→   488→            </div>
+   489→   489→            <div>
+   490→   490→              <h1 className="font-bold text-lg leading-tight">Dashboard Izumi</h1>
+   491→   491→              <p className="text-xs text-slate-400">Sistem Keuangan Mandiri</p>
+   492→   492→            </div>
+   493→   493→          </div>
+   494→   494→        </div>
+   495→   495→
+   496→   496→        <div className="flex-1 p-4 space-y-2">
+   497→   497→          <div className="flex items-center gap-3 px-3 py-2.5 bg-blue-500/20 text-blue-400 rounded-lg">
+   498→   498→            <Settings className="w-4 h-4" />
+   499→   499→            <span className="text-sm font-medium">Catatan Keuangan</span>
+   500→   500→          </div>
+   501→   501→        </div>
+   502→   502→
+   503→   503→        <div className="p-4 border-t border-slate-700 space-y-3">
+   504→   504→          <div className="flex items-center gap-3 px-3 py-2">
+   505→   505→            <div className="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center">
+   506→   506→              <User className="w-4 h-4" />
+   507→   507→            </div>
+   508→   508→            <div className="flex-1 min-w-0">
+   509→   509→              <p className="text-sm font-medium truncate">{user?.name}</p>
+   510→   510→              <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+   511→   511→            </div>
+   512→   512→          </div>
+   513→   513→          <Button
+   514→   514→            variant="ghost"
+   515→   515→            className="w-full justify-start text-slate-400 hover:text-white hover:bg-slate-700"
+   516→   516→            onClick={handleLogout}
+   517→   517→          >
+   518→   518→            <LogOut className="w-4 h-4 mr-2" />
+   519→   519→            Keluar
+   520→   520→          </Button>
+   521→   521→        </div>
+   522→   522→      </aside>
+   523→   523→
+   524→   524→      {/* Mobile Header */}
+   525→   525→      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-slate-800 text-white px-4 py-3 flex items-center justify-between">
+   526→   526→        <div className="flex items-center gap-2">
+   527→   527→          <Scale className="w-5 h-5 text-blue-400" />
+   528→   528→          <span className="font-bold">Izumi</span>
+   529→   529→        </div>
+   530→   530→        <div className="flex items-center gap-2">
+   531→   531→          <span className="text-xs text-slate-400 truncate max-w-[120px]">{user?.name}</span>
+   532→   532→          <Button
+   533→   533→            variant="ghost"
+   534→   534→            size="sm"
+   535→   535→            className="text-slate-400 hover:text-white h-8 w-8 p-0"
+   536→   536→            onClick={handleLogout}
+   537→   537→          >
+   538→   538→            <LogOut className="w-4 h-4" />
+   539→   539→          </Button>
+   540→   540→        </div>
+   541→   541→      </div>
+   542→   542→
+   543→   543→      {/* Main Content */}
+   544→   544→      <main className="flex-1 md:p-6 p-4 pt-16 md:pt-6 overflow-y-auto">
+   545→   545→        {/* Mobile Welcome */}
+   546→   546→        <div className="md:hidden mb-4">
+   547→   547→          <h2 className="text-lg font-bold text-slate-800">
+   548→   548→            Halo, {user?.name?.split(" ")[0]} 👋
+   549→   549→          </h2>
+   550→   550→          <p className="text-sm text-slate-500">Kelola keuangan pribadimu di sini</p>
+   551→   551→        </div>
+   552→   552→
+   553→   553→        {/* Summary Cards */}
+   554→   554→        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+   555→   555→          <motion.div
+   556→   556→            initial={{ opacity: 0, y: 10 }}
+   557→   557→            animate={{ opacity: 1, y: 0 }}
+   558→   558→            transition={{ delay: 0.1 }}
+   559→   559→            className="bg-emerald-50 border border-emerald-200 rounded-xl p-4"
+   560→   560→          >
+   561→   561→            <div className="flex items-center gap-3 mb-2">
+   562→   562→              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+   563→   563→                <TrendingDown className="w-4 h-4 text-emerald-600" />
+   564→   564→              </div>
+   565→   565→              <span className="text-sm font-medium text-emerald-700">Total Pemasukan</span>
+   566→   566→            </div>
+   567→   567→            <p className="text-xl font-bold text-emerald-800">
+   568→   568→              {formatRupiah(summary.totalPemasukan)}
+   569→   569→            </p>
+   570→   570→          </motion.div>
+   571→   571→
+   572→   572→          <motion.div
+   573→   573→            initial={{ opacity: 0, y: 10 }}
+   574→   574→            animate={{ opacity: 1, y: 0 }}
+   575→   575→            transition={{ delay: 0.2 }}
+   576→   576→            className="bg-red-50 border border-red-200 rounded-xl p-4"
+   577→   577→          >
+   578→   578→            <div className="flex items-center gap-3 mb-2">
+   579→   579→              <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
+   580→   580→                <TrendingUp className="w-4 h-4 text-red-600" />
+   581→   581→              </div>
+   582→   582→              <span className="text-sm font-medium text-red-700">Total Pengeluaran</span>
+   583→   583→            </div>
+   584→   584→            <p className="text-xl font-bold text-red-800">
+   585→   585→              {formatRupiah(summary.totalPengeluaran)}
+   586→   586→            </p>
+   587→   587→          </motion.div>
+   588→   588→
+   589→   589→          <motion.div
+   590→   590→            initial={{ opacity: 0, y: 10 }}
+   591→   591→            animate={{ opacity: 1, y: 0 }}
+   592→   592→            transition={{ delay: 0.3 }}
+   593→   593→            className="bg-blue-50 border border-blue-200 rounded-xl p-4"
+   594→   594→          >
+   595→   595→            <div className="flex items-center gap-3 mb-2">
+   596→   596→              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+   597→   597→                <Scale className="w-4 h-4 text-blue-600" />
+   598→   598→              </div>
+   599→   599→              <span className="text-sm font-medium text-blue-700">Sisa Saldo Akhir</span>
+   600→   600→            </div>
+   601→   601→            <p className="text-xl font-bold text-blue-800">
+   602→   602→              {formatRupiah(summary.sisaSaldo)}
+   603→   603→            </p>
+   604→   604→          </motion.div>
+   605→   605→        </div>
+   606→   606→
+   607→   607→        {/* Form + Table Grid */}
+   608→   608→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   609→   609→          {/* Transaction Form */}
+   610→   610→          <motion.div
+   611→   611→            initial={{ opacity: 0, x: -20 }}
+   612→   612→            animate={{ opacity: 1, x: 0 }}
+   613→   613→            transition={{ delay: 0.4 }}
+   614→   614→          >
+   615→   615→            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+   616→   616→              <div className="flex items-center gap-2 mb-5">
+   617→   617→                <PlusCircle className="w-5 h-5 text-blue-500" />
+   618→   618→                <h3 className="font-semibold text-slate-800">Tambah Log Transaksi</h3>
+   619→   619→              </div>
+   620→   620→
+   621→   621→              <form onSubmit={handleSubmit} className="space-y-4">
+   622→   622→                {/* Type */}
+   623→   623→                <div>
+   624→   624→                  <Label className="text-sm font-medium text-slate-700 mb-2 block">
+   625→   625→                    Jenis Aliran Dana
+   626→   626→                  </Label>
+   627→   627→                  <RadioGroup
+   628→   628→                    value={txType}
+   629→   629→                    onValueChange={(v) => {
+   630→   630→                      setTxType(v as "pemasukan" | "pengeluaran")
+   631→   631→                      setTxCategory("")
+   632→   632→                    }}
+   633→   633→                    className="flex gap-3"
+   634→   634→                  >
+   635→   635→                    <div className="flex items-center space-x-2">
+   636→   636→                      <RadioGroupItem value="pemasukan" id="pemasukan" />
+   637→   637→                      <Label htmlFor="pemasukan" className="cursor-pointer text-emerald-700 font-medium">
+   638→   638→                        Pemasukan
+   639→   639→                      </Label>
+   640→   640→                    </div>
+   641→   641→                    <div className="flex items-center space-x-2">
+   642→   642→                      <RadioGroupItem value="pengeluaran" id="pengeluaran" />
+   643→   643→                      <Label htmlFor="pengeluaran" className="cursor-pointer text-red-700 font-medium">
+   644→   644→                        Pengeluaran
+   645→   645→                      </Label>
+   646→   646→                    </div>
+   647→   647→                  </RadioGroup>
+   648→   648→                </div>
+   649→   649→
+   650→   650→                {/* Date */}
+   651→   651→                <div>
+   652→   652→                  <Label htmlFor="txDate" className="text-sm font-medium text-slate-700">
+   653→   653→                    Tanggal Transaksi
+   654→   654→                  </Label>
+   655→   655→                  <Input
+   656→   656→                    id="txDate"
+   657→   657→                    type="date"
+   658→   658→                    value={txDate}
+   659→   659→                    onChange={(e) => setTxDate(e.target.value)}
+   660→   660→                    className="mt-1.5"
+   661→   661→                    required
+   662→   662→                  />
+   663→   663→                </div>
+   664→   664→
+   665→   665→                {/* Category */}
+   666→   666→                <div>
+   667→   667→                  <Label className="text-sm font-medium text-slate-700">Kategori</Label>
+   668→   668→                  <Select value={txCategory} onValueChange={setTxCategory} required>
+   669→   669→                    <SelectTrigger className="mt-1.5">
+   670→   670→                      <SelectValue placeholder="Pilih kategori" />
+   671→   671→                    </SelectTrigger>
+   672→   672→                    <SelectContent>
+   673→   673→                      {currentCategories.map((cat) => (
+   674→   674→                        <SelectItem key={cat} value={cat}>
+   675→   675→                          {cat}
+   676→   676→                        </SelectItem>
+   677→   677→                      ))}
+   678→   678→                    </SelectContent>
+   679→   679→                  </Select>
+   680→   680→                </div>
+   681→   681→
+   682→   682→                {/* Amount */}
+   683→   683→                <div>
+   684→   684→                  <Label htmlFor="txAmount" className="text-sm font-medium text-slate-700">
+   685→   685→                    Jumlah Nominal (Rupiah)
+   686→   686→                  </Label>
+   687→   687→                  <Input
+   688→   688→                    id="txAmount"
+   689→   689→                    type="number"
+   690→   690→                    placeholder="Contoh: 150000"
+   691→   691→                    value={txAmount}
+   692→   692→                    onChange={(e) => setTxAmount(e.target.value)}
+   693→   693→                    className="mt-1.5"
+   694→   694→                    min="1"
+   695→   695→                    required
+   696→   696→                  />
+   697→   697→                </div>
+   698→   698→
+   699→   699→                {/* Description */}
+   700→   700→                <div>
+   701→   701→                  <Label htmlFor="txDesc" className="text-sm font-medium text-slate-700">
+   702→   702→                    Keterangan Tambahan
+   703→   703→                  </Label>
+   704→   704→                  <Textarea
+   705→   705→                    id="txDesc"
+   706→   706→                    placeholder="Contoh: Beli domain .com, Keuntungan rekening..."
+   707→   707→                    value={txDescription}
+   708→   708→                    onChange={(e) => setTxDescription(e.target.value)}
+   709→   709→                    className="mt-1.5 resize-none"
+   710→   710→                    rows={3}
+   711→   711→                  />
+   712→   712→                </div>
+   713→   713→
+   714→   714→                {/* Submit */}
+   715→   715→                <Button
+   716→   716→                  type="submit"
+   717→   717→                  disabled={submitting}
+   718→   718→                  className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-5"
+   719→   719→                >
+   720→   720→                  <Lock className="w-4 h-4 mr-2" />
+   721→   721→                  {submitting ? "Menyimpan..." : "Amankan Catatan"}
+   722→   722→                </Button>
+   723→   723→              </form>
+   724→   724→            </div>
+   725→   725→          </motion.div>
+   726→   726→
+   727→   727→          {/* Transaction History */}
+   728→   728→          <motion.div
+   729→   729→            initial={{ opacity: 0, x: 20 }}
+   730→   730→            animate={{ opacity: 1, x: 0 }}
+   731→   731→            transition={{ delay: 0.5 }}
+   732→   732→          >
+   733→   733→            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+   734→   734→              <div className="flex items-center justify-between mb-4">
+   735→   735→                <div className="flex items-center gap-2">
+   736→   736→                  <Clock className="w-5 h-5 text-blue-500" />
+   737→   737→                  <h3 className="font-semibold text-slate-800">Riwayat Aliran Dana</h3>
+   738→   738→                </div>
+   739→   739→              </div>
+   740→   740→
+   741→   741→              {/* Filters */}
+   742→   742→              <div className="flex gap-2 mb-4">
+   743→   743→                <Select value={filterMonth} onValueChange={setFilterMonth}>
+   744→   744→                  <SelectTrigger className="w-[140px]">
+   745→   745→                    <SelectValue />
+   746→   746→                  </SelectTrigger>
+   747→   747→                  <SelectContent>
+   748→   748→                    {MONTHS.map((m, i) => (
+   749→   749→                      <SelectItem key={m} value={String(i + 1)}>
+   750→   750→                        {m}
+   751→   751→                      </SelectItem>
+   752→   752→                    ))}
+   753→   753→                  </SelectContent>
+   754→   754→                </Select>
+   755→   755→                <Select value={filterYear} onValueChange={setFilterYear}>
+   756→   756→                  <SelectTrigger className="w-[100px]">
+   757→   757→                    <SelectValue />
+   758→   758→                  </SelectTrigger>
+   759→   759→                  <SelectContent>
+   760→   760→                    {years.map((y) => (
+   761→   761→                      <SelectItem key={y} value={y}>
+   762→   762→                        {y}
+   763→   763→                      </SelectItem>
+   764→   764→                    ))}
+   765→   765→                  </SelectContent>
+   766→   766→                </Select>
+   767→   767→              </div>
+   768→   768→
+   769→   769→              {/* Table */}
+   770→   770→              {loading ? (
+   771→   771→                <div className="flex items-center justify-center py-12">
+   772→   772→                  <svg className="animate-spin h-6 w-6 text-slate-400" viewBox="0 0 24 24">
+   773→   773→                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+   774→   774→                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+   775→   775→                  </svg>
+   776→   776→                </div>
+   777→   777→              ) : transactions.length === 0 ? (
+   778→   778→                <div className="text-center py-12">
+   779→   779→                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 mb-4">
+   780→   780→                    <Clock className="w-8 h-8 text-slate-300" />
+   781→   781→                  </div>
+   782→   782→                  <p className="text-slate-500 text-sm">
+   783→   783→                    Tidak ditemukan catatan keuangan di bulan &amp; tahun ini.
+   784→   784→                  </p>
+   785→   785→                </div>
+   786→   786→              ) : (
+   787→   787→                <div className="overflow-x-auto rounded-lg border border-slate-200 max-h-[400px] overflow-y-auto">
+   788→   788→                  <table className="w-full text-sm">
+   789→   789→                    <thead className="bg-slate-50 sticky top-0">
+   790→   790→                      <tr>
+   791→   791→                        <th className="text-left px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">Tanggal</th>
+   792→   792→                        <th className="text-left px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">Kategori</th>
+   793→   793→                        <th className="text-left px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">Keterangan</th>
+   794→   794→                        <th className="text-left px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">Status</th>
+   795→   795→                        <th className="text-right px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">Nominal</th>
+   796→   796→                        <th className="text-center px-3 py-2.5 font-semibold text-slate-600 whitespace-nowrap">Aksi</th>
+   797→   797→                      </tr>
+   798→   798→                    </thead>
+   799→   799→                    <tbody className="divide-y divide-slate-100">
+   800→   800→                      {transactions.map((tx) => (
+   801→   801→                        <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors">
+   802→   802→                          <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
+   803→   803→                            {formatDate(tx.date)}
+   804→   804→                          </td>
+   805→   805→                          <td className="px-3 py-2.5 text-slate-700 font-medium whitespace-nowrap max-w-[120px] truncate">
+   806→   806→                            {tx.category}
+   807→   807→                          </td>
+   808→   808→                          <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap max-w-[120px] truncate">
+   809→   809→                            {tx.description || "-"}
+   810→   810→                          </td>
+   811→   811→                          <td className="px-3 py-2.5 whitespace-nowrap">
+   812→   812→                            <span
+   813→   813→                              className={cn(
+   814→   814→                                "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+   815→   815→                                tx.type === "pemasukan"
+   816→   816→                                  ? "bg-emerald-100 text-emerald-700"
+   817→   817→                                  : "bg-red-100 text-red-700"
+   818→   818→                              )}
+   819→   819→                            >
+   820→   820→                              {tx.type === "pemasukan" ? "Masuk" : "Keluar"}
+   821→   821→                            </span>
+   822→   822→                          </td>
+   823→   823→                          <td
+   824→   824→                            className={cn(
+   825→   825→                              "px-3 py-2.5 text-right font-semibold whitespace-nowrap",
+   826→   826→                              tx.type === "pemasukan" ? "text-emerald-600" : "text-red-600"
+   827→   827→                            )}
+   828→   828→                          >
+   829→   829→                            {tx.type === "pemasukan" ? "+" : "-"}
+   830→   830→                            {formatRupiah(tx.amount)}
+   831→   831→                          </td>
+   832→   832→                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
+   833→   833→                            <button
+   834→   834→                              onClick={() => handleDelete(tx.id)}
+   835→   835→                              className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+   836→   836→                              title="Hapus transaksi"
+   837→   837→                            >
+   838→   838→                              <Trash2 className="w-4 h-4" />
+   839→   839→                            </button>
+   840→   840→                          </td>
+   841→   841→                        </tr>
+   842→   842→                      ))}
+   843→   843→                    </tbody>
+   844→   844→                  </table>
+   845→   845→                </div>
+   846→   846→              )}
+   847→   847→
+   848→   848→              {/* Reset Button */}
+   849→   849→              {transactions.length > 0 && (
+   850→   850→                <div className="mt-4 pt-4 border-t border-slate-100">
+   851→   851→                  <button
+   852→   852→                    onClick={handleReset}
+   853→   853→                    className="flex items-center gap-2 text-sm text-red-500 hover:text-red-600 font-medium transition-colors"
+   854→   854→                  >
+   855→   855→                    <RotateCcw className="w-4 h-4" />
+   856→   856→                    Reset Seluruh Database Keuangan
+   857→   857→                  </button>
+   858→   858→                </div>
+   859→   859→              )}
+   860→   860→            </div>
+   861→   861→          </motion.div>
+   862→   862→        </div>
+   863→   863→
+   864→   864→        {/* Footer */}
+   865→   865→        <footer className="mt-8 pt-4 border-t border-slate-200 text-center">
+   866→   866→          <p className="text-xs text-slate-400">
+   867→   867→            Dashboard Izumi — Sistem Keuangan Mandiri •{" "}
+   868→   868→            {new Date().toLocaleDateString("id-ID", {
+   869→   869→              day: "numeric",
+   870→   870→              month: "long",
+   871→   871→              year: "numeric",
+   872→   872→            })}
+   873→   873→          </p>
+   874→   874→        </footer>
+   875→   875→      </main>
+   876→   876→    </div>
+   877→   877→  )
+   878→   878→}
+   879→   879→
+   880→   880→// ========== MAIN PAGE ==========
+   881→   881→function MainPage() {
+   882→   882→  const { user, loading } = useAuth()
+   883→   883→
+   884→   884→  // While checking session or no user, show auth page
+   885→   885→  // (auth page is also server-rendered as default)
+   886→   886→  if (loading || !user) {
+   887→   887→    return <AuthPage />
+   888→   888→  }
+   889→   889→
+   890→   890→  return <Dashboard />
+   891→   891→}
+   892→   892→
+   893→   893→// ========== PROVIDER WRAPPER ==========
+   894→   894→export default function Home() {
+   895→   895→  return (
+   896→   896→    <AuthProvider>
+   897→   897→      <MainPage />
+   898→   898→    </AuthProvider>
+   899→   899→  )
+   900→   900→}
