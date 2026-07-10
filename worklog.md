@@ -46,3 +46,26 @@ Stage Summary:
 - All features verified working correctly
 - Multi-user data isolation is properly enforced at both API and database level
 - No code changes needed - the app from the previous session is fully functional
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix login stuck issue - dashboard not appearing after successful login
+
+Work Log:
+- Diagnosed root cause: dev log showed 401 errors on /api/transactions and /api/summary immediately after login
+- The cookie set by login API was not being sent back in subsequent fetch calls (proxy/sandbox environment issue)
+- Fixed by implementing dual auth strategy: cookie + Bearer token via localStorage
+- Changes made:
+  1. `src/lib/auth.ts` - getSession() now also checks Authorization header as fallback
+  2. `src/app/api/auth/login/route.ts` - Now returns token in response body alongside cookie
+  3. `src/app/page.tsx` - Added localStorage token storage, authHeaders() helper, loginDirect() method
+  4. All Dashboard fetch calls now include Authorization header via authHeaders()
+- Verified fix: login → dashboard transition is now instant, no 401 errors in logs
+- Added expense transaction (Rp150.000) successfully, summary updated correctly (Rp4.850.000 saldo)
+
+Stage Summary:
+- Login flow fixed: token stored in localStorage + sent as Bearer header
+- No more 401 errors after login
+- Session persistence works across page reloads via localStorage token
+- Cookie mechanism kept as fallback for same-origin environments

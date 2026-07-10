@@ -55,13 +55,37 @@ interface Summary {
   sisaSaldo: number
 }
 
+// ---------- Auth helpers ----------
+function getToken(): string | null {
+  if (typeof window === "undefined") return null
+  return localStorage.getItem("izumi-token")
+}
+
+function setToken(token: string) {
+  localStorage.setItem("izumi-token", token)
+}
+
+function clearToken() {
+  localStorage.removeItem("izumi-token")
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getToken()
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+  return headers
+}
+
 // ---------- Auth Context ----------
 const AuthContext = createContext<{
   user: SessionUser | null
   loading: boolean
   refresh: () => Promise<void>
   logout: () => Promise<void>
-}>({ user: null, loading: true, refresh: async () => {}, logout: async () => {} })
+  loginDirect: (user: SessionUser, token: string) => void
+}>({ user: null, loading: true, refresh: async () => {}, logout: async () => {}, loginDirect: () => {} })
 
 function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null)
@@ -69,7 +93,12 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/session")
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`
+      }
+      const res = await fetch("/api/auth/session", { headers })
       const data = await res.json()
       setUser(data.session)
     } catch {
@@ -79,8 +108,14 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const loginDirect = useCallback((u: SessionUser, token: string) => {
+    setToken(token)
+    setUser(u)
+  }, [])
+
   const logout = useCallback(async () => {
-    await fetch("/api/auth/logout", { method: "POST" })
+    clearToken()
+    await fetch("/api/auth/logout", { method: "POST", headers: authHeaders() })
     setUser(null)
   }, [])
 
@@ -89,7 +124,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh])
 
   return (
-    <AuthContext.Provider value={{ user, loading, refresh, logout }}>
+    <AuthContext.Provider value={{ user, loading, refresh, logout, loginDirect }}>
       {children}
     </AuthContext.Provider>
   )
@@ -154,7 +189,7 @@ function AuthPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
-  const { refresh } = useAuth()
+  const { refresh, loginDirect } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -193,8 +228,9 @@ function AuthPage() {
           return
         }
 
+        // Immediately set user + token from response (no dependency on cookies)
+        loginDirect(data.user, data.token)
         toast({ title: "Login Berhasil!", description: `Selamat datang, ${data.user.name}` })
-        await refresh()
       }
     } catch {
       toast({ title: "Error", description: "Terjadi kesalahan", variant: "destructive" })
@@ -368,9 +404,10 @@ function Dashboard() {
 
   const fetchData = useCallback(async () => {
     try {
+      const headers = authHeaders()
       const [txRes, sumRes] = await Promise.all([
-        fetch(`/api/transactions?month=${filterMonth}&year=${filterYear}`),
-        fetch("/api/summary"),
+        fetch(`/api/transactions?month=${filterMonth}&year=${filterYear}`, { headers }),
+        fetch("/api/summary", { headers }),
       ])
 
       if (txRes.ok) {
@@ -406,7 +443,7 @@ function Dashboard() {
     try {
       const res = await fetch("/api/transactions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(),
         body: JSON.stringify({
           type: txType,
           date: txDate,
@@ -437,7 +474,7 @@ function Dashboard() {
     if (!confirm("Yakin ingin menghapus transaksi ini?")) return
 
     try {
-      const res = await fetch(`/api/transactions?id=${id}`, { method: "DELETE" })
+      const res = await fetch(`/api/transactions?id=${id}`, { method: "DELETE", headers: authHeaders() })
       const data = await res.json()
 
       if (res.ok) {
@@ -455,7 +492,7 @@ function Dashboard() {
     if (!confirm("PERINGATAN: Semua data keuangan Anda akan dihapus permanen. Lanjutkan?")) return
 
     try {
-      const res = await fetch("/api/transactions", { method: "PUT" })
+      const res = await fetch("/api/transactions", { method: "PUT", headers: authHeaders() })
       const data = await res.json()
 
       if (res.ok) {

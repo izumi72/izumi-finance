@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken"
 import { cookies } from "next/headers"
+import { headers } from "next/headers"
 
 const JWT_SECRET = process.env.NEXTAUTH_SECRET || "fallback-secret"
 
@@ -37,10 +38,23 @@ export function verifyToken(token: string): SessionUser | null {
 }
 
 export async function getSession(): Promise<SessionUser | null> {
+  // 1. Try cookie first
   const cookieStore = await cookies()
-  const token = cookieStore.get("izumi-session")?.value
+  const cookieToken = cookieStore.get("izumi-session")?.value
 
-  if (!token) return null
+  if (cookieToken) {
+    const user = verifyToken(cookieToken)
+    if (user) return user
+  }
 
-  return verifyToken(token)
+  // 2. Fallback: check Authorization header (Bearer token from localStorage)
+  const headersList = await headers()
+  const authHeader = headersList.get("authorization")
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7)
+    const user = verifyToken(token)
+    if (user) return user
+  }
+
+  return null
 }
